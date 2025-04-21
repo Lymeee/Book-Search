@@ -131,5 +131,5 @@ def run_app(path):
         print(f"\nFaster: {result['faster']}\n")
 
 # Example usage:
-run_app("/home/lymee/Downloads/editions_sample_500k.json.gz") # <--- Uncomment and adjust path when ready
+run_app("./editions_sample_500k.json.gz") # <--- Uncomment and adjust path when ready
 
