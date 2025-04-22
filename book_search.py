@@ -132,7 +132,8 @@ def run_app(path):
 # Example usage:
 #run_app("enriched_editions.json.gz") # <--- Uncomment and adjust path when ready
 
-# -------------------- GUI --------------------
+# ---------------------------------------- GUI FUNCTION ----------------------------------------
+
 
 def create_gui(path):
 
@@ -148,48 +149,62 @@ def create_gui(path):
 
     root = tk.Tk()
     root.title("Project 3")
-    root.geometry("1200x850")
+    root.geometry("1500x900")
     root.configure(bg="#ebf2f5")
 
-    # --- Header ---
+
+
+# -------------------------- Header --------------------------
+
     header_frame = tk.Frame(root, bg="#84afbd")
     header_frame.pack(fill="x")
     header_label = tk.Label(header_frame, text="Book Search", bg="#84afbd", fg="white",font=("Segoe UI", 16, "bold"), pady=10)
     header_label.pack(fill="x")
 
-    # --- Top Frame ---
+
+
+# -------------------------- Top Frame --------------------------
+
     top_frame = tk.Frame(root, bg="#ebf2f5")
     top_frame.pack(pady=15, padx=150, fill="x")
 
     style = ttk.Style()
     style.configure("Rounded.TCombobox",relief="flat",borderwidth=0,arrowsize=12,padding=5,background="#ffffff",fieldbackground="#ffffff", foreground="#4d4d4d")
 
-    time_taken = ""
-
+    time_taken_var = tk.StringVar(value="Time Taken:")
     search_type = tk.StringVar(value="Tries")
+
     tk.Label(top_frame, text="Algorithm:", foreground="#4d4d4d",bg="#ebf2f5", font=("Segoe UI", 10)).grid(row=0, column=2, padx=5)
     search_dropDown = ttk.Combobox(top_frame, textvariable=search_type, values=["Tries", "Ternary"], state="readonly", width=12, style="Rounded.TCombobox")
     search_dropDown.grid(row=0, column=3, padx=10)
-    tk.Label(top_frame, text=f"Time Taken: {time_taken}", foreground="#808080",bg="#ebf2f5", font=("Segoe UI", 10)).grid(row=0, column=4, padx=5)
+    tk.Label(top_frame, textvariable=time_taken_var, foreground="#808080",bg="#ebf2f5", font=("Segoe UI", 10)).grid(row=0, column=4, padx=5)
 
 
-    # --- Mid Frame with Canvas for Rounded Entry ---
+
+# -------------------------- Mid Frame with Canvas for Rounded Entry --------------------------
+
     mid_frame = tk.Frame(root, bg="#ebf2f5")
     mid_frame.pack(pady=10, padx=150, fill="x")
 
     search_term = tk.StringVar()
 
-    entry_canvas_Frame = tk.Frame(mid_frame, bg="#ebf2f5")
-    entry_canvas_Frame.pack(fill="x")
+    search_container = tk.Frame(mid_frame, bg="#ebf2f5")
+    search_container.pack(fill="x",pady=15)
 
-    canvas_entry = tk.Canvas(entry_canvas_Frame, height=40, bg="#ebf2f5", highlightthickness=0)
-    canvas_entry.pack(fill="x")
+    entry_canvas_frame = tk.Frame(search_container, bg="#ebf2f5")
+    entry_canvas_frame.pack(side="left", padx=(0, 10))
+
+    canvas_entry = tk.Canvas(entry_canvas_frame, width = 1100,height=40, bg="#ebf2f5", highlightthickness=0)
+    canvas_entry.pack(side="left", padx=(0, 10))
 
     canvas_entry.bind("<Configure>", lambda e: draw_rounded_entry(canvas_entry, e.width, 40))
-
-    search_entry = tk.Entry(entry_canvas_Frame, textvariable=search_term, bd=0, font=("Segoe UI", 11), bg="white")
+    
+    search_entry = tk.Entry(entry_canvas_frame,width = 1100,textvariable=search_term, bd=0, font=("Segoe UI", 11), bg="white")
     search_entry.place(relx=0.02, rely=0.15, relwidth=0.96, height=25)
 
+    button_frame = tk.Frame(search_container, bg="#ebf2f5")
+    button_frame.pack(side="left")
+    
 
     placeholder_text = "Search"
 
@@ -207,6 +222,52 @@ def create_gui(path):
     search_entry.bind("<FocusOut>", set_placeholder)
     set_placeholder()
 
+
+    suggestion_frame = tk.Frame(mid_frame, bg="#ebf2f5")
+    suggestion_frame.config(bg="#ebf2f5",bd=0)
+    suggestion_frame.pack(fill="x", pady=(10))
+
+    suggestion_buttons = []
+
+
+    # ------------- Auto Suggestions Functions -------------
+
+
+    def autofill_and_search(match):
+        search_term.set(match['title'])
+        show_suggestions("")
+        perform_search()
+
+
+    def show_suggestions(query):
+        for btn in suggestion_buttons:
+            btn.destroy()
+        suggestion_buttons.clear()
+        suggestion_frame.pack_forget()
+
+        if not query or query == placeholder_text.lower():
+            return
+
+        matches = [
+            entry for entry in entries
+            if query in entry['title'].lower() or query in entry['author'].lower()
+        ][:3]
+
+        suggestion_frame.pack(fill="x", pady=(10))
+        
+        for match in matches:
+            text = f"{match['title']} - {match['author'] or 'Unknown'}"
+            btn = tk.Button(suggestion_frame, text=text, anchor="w", font=("Segoe UI", 9),bg="white", fg="#4d4d4d", bd=0, relief="solid",command=lambda m=match: autofill_and_search(m))
+            btn.bind("<Enter>", lambda e: e.widget.config(bg="#d5dce0"))
+            btn.bind("<Leave>", lambda e: e.widget.config(bg="white"))
+            btn.pack(fill="x", padx=2, pady=0)
+            suggestion_buttons.append(btn)
+
+            
+
+
+    # ------------- UI Search Logic -----------------
+
     def perform_trie_search(query):
         query = query.lower()
 
@@ -219,7 +280,8 @@ def create_gui(path):
         ]
         end_trie = time.perf_counter()
 
-        time_taken = (end_trie - start_trie) * 1000  
+        time_taken = (end_trie - start_trie) * 1000
+        time_taken_var.set(f"Time Taken: {time_taken:.2f} ms")  
 
         results_box.insert(tk.END, "-" * 40)
         if matches:
@@ -229,6 +291,7 @@ def create_gui(path):
                 results_box.insert(tk.END, "-" * 40)
         else:
             results_box.insert(tk.END, "No matches found.")
+            results_box.insert(tk.END, "-" * 40)
 
 
     def perform_tst_search(query):
@@ -244,6 +307,7 @@ def create_gui(path):
         end_tst = time.perf_counter()
 
         time_taken = (end_tst - start_tst) * 1000
+        time_taken_var.set(f"Time Taken: {time_taken:.2f} ms")
 
         results_box.insert(tk.END, "-" * 40)
         if matches:
@@ -253,6 +317,7 @@ def create_gui(path):
                 results_box.insert(tk.END, "-" * 40)
         else:
             results_box.insert(tk.END, "No matches found.")
+            results_box.insert(tk.END, "-" * 40)
 
 
     def perform_search(event=None):
@@ -265,6 +330,10 @@ def create_gui(path):
             perform_tst_search(query)
 
 
+    search_btn = tk.Button(button_frame, text="Search",cursor="hand2",font=("Segoe UI", 9),bg="#84afbd",fg="white",relief="flat",padx=10,pady=5,command=perform_search)
+    search_btn.pack(side="left", padx=(0, 10))
+
+    # ------------- UI Rounded Canvas Function -----------------
 
     def draw_rounded_entry(canvas, width, height):
         canvas.delete("all")
@@ -276,26 +345,32 @@ def create_gui(path):
         canvas.create_rectangle(r, 0, width - r, height, fill="white", outline="white")
         canvas.create_rectangle(0, r, width, height - r, fill="white", outline="white")
 
-    # --- Bottom Frame ---
+
+
+# -------------------------- Bottom Frame --------------------------
+
+
     bottom_frame = tk.Frame(root, bg="#ebf2f5")
     bottom_frame.pack(fill="both", expand=True, padx=50, pady=15)
 
-    # Results Box
+    # ------------- Result Box -------------
     bottom_frame.rowconfigure(0, weight=1)
     bottom_frame.columnconfigure(0, weight=1)
 
     results_box = tk.Listbox(bottom_frame, bd=0, highlightthickness=0, relief="flat",font=("Courier New", 10), background="#ebf2f5", foreground="#4d4d4d")
     results_box.grid(row=0, column=0, sticky="nsew", padx=100, pady=10)
 
-    # Scrollbar
+    # ------------- Scroll Bar -------------
     scroll_bar = tk.Scrollbar(bottom_frame, command=results_box.yview)
     results_box.config(yscrollcommand=scroll_bar.set)
     scroll_bar.grid(row=0, column=1, sticky='ns', pady=10)
 
-    # --- Bind Events ---
+
+# -------------------------- Binding Events --------------------------
+
 
     search_entry.bind("<Return>", perform_search)
-
+    search_entry.bind("<KeyRelease>", lambda e: show_suggestions(search_term.get().strip().lower()))
     root.mainloop()
 
 create_gui("enriched_editions.json.gz")
