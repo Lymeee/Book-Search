@@ -255,7 +255,7 @@ def create_gui(path):
 
         suggestion_frame.pack(fill="x", pady=(10))
         
-        for match in matches:
+        for match in matches[:3]:
             text = f"{match['title']} - {match['author'] or 'Unknown'}"
             btn = tk.Button(suggestion_frame, text=text, anchor="w", font=("Segoe UI", 9),bg="white", fg="#4d4d4d", bd=0, relief="solid",command=lambda m=match: autofill_and_search(m))
             btn.bind("<Enter>", lambda e: e.widget.config(bg="#d5dce0"))
