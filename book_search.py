@@ -2,6 +2,8 @@ import gzip
 import json
 import time
 import sys
+import tkinter as tk
+from tkinter import ttk
 sys.setrecursionlimit(10000)
 
 # -------------------- DATA STRUCTURES --------------------
