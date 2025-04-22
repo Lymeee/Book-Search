@@ -322,6 +322,8 @@ def create_gui(path):
 
     def perform_search(event=None):
         query = search_term.get().strip()
+        suggestion_buttons.clear()
+        suggestion_frame.pack_forget()
         if not query or query == placeholder_text:
             return
         if search_type.get() == "Tries":
