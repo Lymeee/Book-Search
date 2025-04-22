@@ -235,8 +235,15 @@ def create_gui(path):
 
     def autofill_and_search(match):
         search_term.set(match['title'])
-        show_suggestions("")
+        clear_suggestions()
         perform_search()
+
+    def clear_suggestions():
+        for btn in suggestion_buttons:
+            btn.destroy()
+        suggestion_buttons.clear()
+        suggestion_frame.pack_forget()
+
 
 
     def show_suggestions(query):
@@ -322,8 +329,7 @@ def create_gui(path):
 
     def perform_search(event=None):
         query = search_term.get().strip()
-        suggestion_buttons.clear()
-        suggestion_frame.pack_forget()
+        clear_suggestions()
         if not query or query == placeholder_text:
             return
         if search_type.get() == "Tries":
@@ -370,9 +376,13 @@ def create_gui(path):
 
 # -------------------------- Binding Events --------------------------
 
+    def on_key_release(event):
+        if event.keysym != "Return":
+            show_suggestions(search_term.get().strip().lower())
+
 
     search_entry.bind("<Return>", perform_search)
-    search_entry.bind("<KeyRelease>", lambda e: show_suggestions(search_term.get().strip().lower()))
+    search_entry.bind("<KeyRelease>", on_key_release)
     root.mainloop()
 
 create_gui("enriched_editions.json.gz")
