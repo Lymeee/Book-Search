@@ -3,6 +3,7 @@ import json
 import time
 import sys
 sys.setrecursionlimit(10000)
+
 # -------------------- DATA STRUCTURES --------------------
 
 class TrieNode:
@@ -52,38 +53,32 @@ class TernarySearchTree:
 
 # -------------------- LOAD ENTRIES --------------------
 
-def load_entries(path, max_lines=500000):
-    entries = set()
+def load_entries(path):
+    entries = []
     with gzip.open(path, 'rt', encoding='utf-8') as f:
-        for i, line in enumerate(f):
-            parts = line.strip().split('\t')
-            if len(parts) < 3:
-                continue
+        for line in f:
             try:
-                data = json.loads(parts[-1])
-                title = data.get("title", "").strip()
-                authors = data.get("authors", [])
-                author_names = ", ".join(a.get("name", "") for a in authors if isinstance(a, dict))
-                if title:
-                    entry = f"title: {title} - author: {author_names}" if author_names else f"title: {title}"
-                    entries.add(entry.lower())
+                data = json.loads(line.strip())
+                if data.get("title") and data.get("author"):
+                    entries.append(data)
             except:
                 continue
-            if len(entries) >= max_lines:
-                break
-    return list(entries)
+    return entries
 
 # -------------------- BENCHMARK --------------------
 
 def benchmark_search(query, dataset):
     query = query.lower()
 
+    def match(entry):
+        return query in entry['title'].lower() or query in entry['author'].lower()
+
     start_trie = time.perf_counter()
-    trie_results = [e for e in dataset if query in e]
+    trie_results = [e for e in dataset if match(e)]
     end_trie = time.perf_counter()
 
     start_tst = time.perf_counter()
-    tst_results = [e for e in dataset if query in e]
+    tst_results = [e for e in dataset if match(e)]
     end_tst = time.perf_counter()
 
     trie_time = (end_trie - start_trie) * 1000
@@ -101,14 +96,15 @@ def benchmark_search(query, dataset):
 def run_app(path):
     print("\nLoading entries from:", path)
     entries = load_entries(path)
-    print(f" Loaded {len(entries)} entries\n")
+    print(f"Loaded {len(entries)} enriched entries\n")
 
     print("Building data structures...")
     trie = Trie()
     tst = TernarySearchTree()
     for entry in entries:
-        trie.insert(entry)
-        tst.insert(entry)
+        joined = f"title: {entry['title']} - author: {entry['author']}"
+        trie.insert(joined.lower())
+        tst.insert(joined.lower())
     print("Trie and TST ready.\n")
 
     print("Type any book title or author to search (or type 'exit' to quit):\n")
@@ -117,19 +113,19 @@ def run_app(path):
         if q.lower() == "exit":
             print("Goodbye!")
             break
+
         result = benchmark_search(q, entries)
 
-        print(f"\nQuery: '{result['query']}'")
+        print(f"\nQuery: '{result['query']}' (searches title and author fields)")
         print(f"\nTrie Matches ({result['trie']['time_ms']} ms):")
         for match in result['trie']['matches']:
-            print(" -", match)
+            print(f" Title: {match['title']}\n Author: {match['author'] or 'Unknown'}\n")
 
         print(f"\nTST Matches ({result['tst']['time_ms']} ms):")
         for match in result['tst']['matches']:
-            print(" -", match)
+            print(f" Title: {match['title']}\n Author: {match['author'] or 'Unknown'}\n")
 
         print(f"\nFaster: {result['faster']}\n")
 
 # Example usage:
-run_app("./editions_sample_500k.json.gz") # <--- Uncomment and adjust path when ready
-
+run_app("enriched_editions.json.gz") # <--- Uncomment and adjust path when ready
