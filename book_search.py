@@ -164,13 +164,18 @@ def create_gui(path):
     top_frame.pack(pady=15, padx=150, fill="x")
 
     style = ttk.Style()
-    style.configure("Rounded.TCombobox",relief="flat",borderwidth=0,arrowsize=12,padding=5,background="#ffffff",fieldbackground="#ffffff", foreground="#4d4d4d")
+    style.configure("Rounded.TCombobox",relief="flat",borderwidth=0,arrowsize=12,padding=5,background="#ffffff",fieldbackground="#ffffff", foreground="#808080")
 
-    trie_time_var = tk.StringVar(value="Trie: ")
-    tst_time_var = tk.StringVar(value="TST: ")
+    search_type = tk.StringVar(value="Tries")
+    tst_time_var = tk.StringVar(value="TST Algorithm  |")
+    trie_time_var = tk.StringVar(value="Tries Algorithm  |")
 
-    tk.Label(top_frame, textvariable=trie_time_var, foreground="#137a7f", bg="#ebf2f5", font=("Segoe UI", 10)).grid(row=0, column=2, padx=5, sticky="w")
-    tk.Label(top_frame, textvariable=tst_time_var, foreground="#e12885", bg="#ebf2f5", font=("Segoe UI", 10)).grid(row=0, column=3, padx=5, sticky="w")
+    tk.Label(top_frame, text="Search By:", foreground="#808080",bg="#ebf2f5", font=("Segoe UI", 10)).grid(row=0, column=2, padx=5)
+    search_dropDown = ttk.Combobox(top_frame, textvariable=search_type, values=["Tries", "TST"], state="readonly", width=12, style="Rounded.TCombobox")
+    search_dropDown.grid(row=0, column=3, padx=10)
+    search_dropDown.bind("<<ComboboxSelected>>", lambda e: perform_search())
+    tk.Label(top_frame, textvariable=tst_time_var, foreground="#808080",bg="#ebf2f5", font=("Segoe UI", 10)).grid(row=0, column=4, padx=10)
+    tk.Label(top_frame, textvariable=trie_time_var, foreground="#808080",bg="#ebf2f5", font=("Segoe UI", 10)).grid(row=0, column=5, padx=50)
 
 
     # -------------------------- Mid Frame with Canvas for Rounded Entry --------------------------
@@ -197,8 +202,7 @@ def create_gui(path):
     button_frame = tk.Frame(search_container, bg="#ebf2f5")
     button_frame.pack(side="left")
 
-
-    placeholder_text = "Search"
+    placeholder_text = "Search with a keyword"
 
     def set_placeholder(event=None):
         if not search_term.get():
@@ -236,8 +240,6 @@ def create_gui(path):
         suggestion_buttons.clear()
         suggestion_frame.pack_forget()
 
-
-
     def show_suggestions(query):
         for btn in suggestion_buttons:
             btn.destroy()
@@ -247,12 +249,18 @@ def create_gui(path):
         if not query or query == placeholder_text.lower():
             return
 
-        matches = [
-            entry for entry in entries
-            if query in entry['title'].lower() or query in entry['author'].lower()
-        ][:3]
+        matches = trie.search(query)
+        seen = set()
+        unique_matches = []
+        for entry in matches:
+            uid = (entry['title'], entry['author'])
+            if uid not in seen:
+                seen.add(uid)
+                unique_matches.append(entry)
+            if len(unique_matches) == 3:
+                break
 
-        suggestion_frame.pack(fill="x", pady=(10))
+        suggestion_frame.pack(fill="x", pady=(0))
 
         for match in matches[:3]:
             text = f"{match['title']} - {match['author'] or 'Unknown'}"
@@ -266,6 +274,8 @@ def create_gui(path):
 
 
     # ------------- UI Search Logic -----------------
+
+    last_query = {"input": "", "trie_results": [], "tst_results": []}
 
     def measure_peak_memory(func):
         tracemalloc.start()
@@ -284,73 +294,94 @@ def create_gui(path):
         if not query or query == placeholder_text:
             return
 
-        runs = 1000
-        durations_trie = []
-        durations_tst = []
-        total_memory_trie = 0
-        total_memory_tst = 0
+        if query != last_query["input"]:
+            last_query["input"] = query
 
-        # TRIE
-        durations_trie = []
-        total_memory_trie = 0
-        trie_matches = []
+            runs = 1000
+            durations_trie = []
+            durations_tst = []
+            total_memory_trie = 0
+            total_memory_tst = 0
 
-        for _ in range(runs):
-            tracemalloc.start()
-            start = time.perf_counter_ns()
-            results = trie.search(query, prefix_mode=False)
-            end = time.perf_counter_ns()
-            current, peak = tracemalloc.get_traced_memory()
-            tracemalloc.stop()
-            durations_trie.append((end - start) / 1_000_000)
-            total_memory_trie += peak
-            trie_matches = results  # use last result for display
+            # TRIE
+            durations_trie = []
+            total_memory_trie = 0
+            trie_matches = []
+
+            for _ in range(runs):
+                tracemalloc.start()
+                start = time.perf_counter_ns()
+                results = trie.search(query, prefix_mode=False)
+                end = time.perf_counter_ns()
+                current, peak = tracemalloc.get_traced_memory()
+                tracemalloc.stop()
+                durations_trie.append((end - start) / 1_000_000)
+                total_memory_trie += peak
+                trie_matches = results  # use last result for display
+            last_query["trie_results"] = trie_matches
+
+            # TST 
+            durations_tst = []
+            total_memory_tst = 0
+            tst_matches = []
+
+            for _ in range(runs):
+                tracemalloc.start()
+                start = time.perf_counter_ns()
+                results = tst.search(query, prefix_mode=False)
+                end = time.perf_counter_ns()
+                current, peak = tracemalloc.get_traced_memory()
+                tracemalloc.stop()
+                durations_tst.append((end - start) / 1_000_000)
+                total_memory_tst += peak
+                tst_matches = results
+            last_query["tst_results"] = tst_matches
+
+            #Timings + memory
+            avg_time_trie = sum(durations_trie) / runs
+            avg_time_tst = sum(durations_tst) / runs
+            total_time_trie = sum(durations_trie)
+            total_time_tst = sum(durations_tst)
+            avg_mem_trie = total_memory_trie / runs / 1024
+            avg_mem_tst = total_memory_tst / runs / 1024
+            total_mem_trie = total_memory_trie / 1024
+            total_mem_tst = total_memory_tst / 1024
+
+            trie_time_var.set(f"Tries Algorithm  |\tAvg Time: {avg_time_trie:.4f} ms   Total Time: {total_time_trie:.4f} ms\n"+f"{'':23}Avg Mem: {avg_mem_trie:.2f} KB   Total Mem: {total_mem_trie:.2f} KB")
+            tst_time_var.set(f"TST Algorithm  |\tAvg Time: {avg_time_tst:.4f} ms   Total Time: {total_time_tst:.4f} ms\n"+f"{'':23}Avg Mem: {avg_mem_tst:.2f} KB   Total Mem: {total_mem_tst:.2f} KB")
+        else:
+            trie_matches = last_query["trie_results"]
+            tst_matches = last_query["tst_results"]
 
 
-        # TST 
-        durations_tst = []
-        total_memory_tst = 0
-        tst_matches = []
 
-        for _ in range(runs):
-            tracemalloc.start()
-            start = time.perf_counter_ns()
-            results = tst.search(query, prefix_mode=False)
-            end = time.perf_counter_ns()
-            current, peak = tracemalloc.get_traced_memory()
-            tracemalloc.stop()
-            durations_tst.append((end - start) / 1_000_000)
-            total_memory_tst += peak
-            tst_matches = results
+        # Search Results Display
+        results_box.delete(0, tk.END)
+
+        if trie_matches or tst_matches:
+            if search_type.get() == "Tries":
+                results_box.insert(tk.END, "Tries Results")
+                results_box.insert(tk.END, "-" * 40)
+                for match in trie_matches[:1000]:
+                    results_box.insert(tk.END, f"Title: {match['title']}")
+                    results_box.insert(tk.END, f"Author: {match['author']}")
+                    results_box.insert(tk.END, "-" * 40)
+            else:
+                results_box.insert(tk.END, "TST Results")
+                results_box.insert(tk.END, "-" * 40)
+                for match in tst_matches[:1000]:
+                    results_box.insert(tk.END, f"Title: {match['title']}")
+                    results_box.insert(tk.END, f"Author: {match['author']}")
+                    results_box.insert(tk.END, "-" * 40)
+        else:
+            results_box.insert(tk.END, "No matches found.")
+            results_box.insert(tk.END, "-" * 40)
 
 
+    search_btn = tk.Button(button_frame, text="Search",cursor="hand2",font=("Segoe UI", 9),bg="#84afbd",fg="white",relief="flat",padx=10,pady=5,command=perform_search)
+    search_btn.pack(side="left", padx=(0, 10))
 
-        # Display
-        trie_results_box.delete(0, tk.END)
-        tst_results_box.delete(0, tk.END)
 
-        for match in trie_matches[:1000]:
-            trie_results_box.insert(tk.END, f"Title: {match['title']}")
-            trie_results_box.insert(tk.END, f"Author: {match['author']}")
-            trie_results_box.insert(tk.END, "-" * 40)
-
-        for match in tst_matches[:1000]:
-            tst_results_box.insert(tk.END, f"Title: {match['title']}")
-            tst_results_box.insert(tk.END, f"Author: {match['author']}")
-            tst_results_box.insert(tk.END, "-" * 40)
-
-        # Timings + memory
-        avg_time_trie = sum(durations_trie) / runs
-        avg_time_tst = sum(durations_tst) / runs
-        total_time_trie = sum(durations_trie)
-        total_time_tst = sum(durations_tst)
-        avg_mem_trie = total_memory_trie / runs / 1024
-        avg_mem_tst = total_memory_tst / runs / 1024
-        total_mem_trie = total_memory_trie / 1024
-        total_mem_tst = total_memory_tst / 1024
-
-        trie_time_var.set(f"Trie: {avg_time_trie:.4f} ms avg, {total_time_trie:.4f} ms total | {avg_mem_trie:.2f} KB avg, {total_mem_trie:.2f} KB total")
-        tst_time_var.set(f"TST:  {avg_time_tst:.4f} ms avg, {total_time_tst:.4f} ms total | {avg_mem_tst:.2f} KB avg, {total_mem_tst:.2f} KB total")
 
     # ------------- UI Rounded Canvas Function -----------------
 
@@ -376,12 +407,13 @@ def create_gui(path):
     bottom_frame.rowconfigure(0, weight=1)
     bottom_frame.columnconfigure(0, weight=1)
 
-    trie_results_box = tk.Listbox(bottom_frame, bd=0, highlightthickness=0, relief="flat",font=("Courier New", 10), background="#ebf2f5", foreground="#137a7f")
-    trie_results_box.grid(row=0, column=0, sticky="nsew", padx=(0, 25), pady=10)
+    results_box = tk.Listbox(bottom_frame, bd=0, highlightthickness=0, relief="flat",font=("Courier New", 10), background="#ebf2f5", foreground="#4d4d4d")
+    results_box.grid(row=0, column=0, sticky="nsew", padx=100, pady=10)
 
-    tst_results_box = tk.Listbox(bottom_frame, bd=0, highlightthickness=0, relief="flat",font=("Courier New", 10), background="#ebf2f5", foreground="#e12885")
-    tst_results_box.grid(row=0, column=1, sticky="nsew", padx=(25, 0), pady=10)
-
+    # ------------- Scroll Bar -------------
+    scroll_bar = tk.Scrollbar(bottom_frame, command=results_box.yview)
+    results_box.config(yscrollcommand=scroll_bar.set)
+    scroll_bar.grid(row=0, column=1, sticky='ns', pady=10)
 
 # -------------------------- Binding Events --------------------------
 
