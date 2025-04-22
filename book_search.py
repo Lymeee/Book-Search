@@ -12,47 +12,95 @@ class TrieNode:
     def __init__(self):
         self.children = {}
         self.is_end = False
+        self.entries = []
 
 class Trie:
     def __init__(self):
         self.root = TrieNode()
 
-    def insert(self, word):
+    def insert(self, word, entry):
         cur = self.root
         for ch in word:
             if ch not in cur.children:
                 cur.children[ch] = TrieNode()
             cur = cur.children[ch]
         cur.is_end = True
+        cur.entries.append(entry)
+
+    def search(self, query):
+        node = self.root
+        for ch in query:
+            if ch not in node.children:
+                return []
+            node = node.children[ch]
+        results = []
+        self._collect_all(node, results)
+        return results
+
+    def _collect_all(self, node, results):
+        if node.is_end:
+            results.extend(node.entries)
+        for child in node.children.values():
+            self._collect_all(child, results)
 
 class TSTNode:
     def __init__(self, char):
         self.char = char
         self.left = self.eq = self.right = None
         self.is_end = False
+        self.entries = []
 
 class TernarySearchTree:
     def __init__(self):
         self.root = None
 
-    def insert(self, word):
-        self.root = self._insert(self.root, word, 0)
+    def insert(self, word, entry):
+        self.root = self._insert(self.root, word, 0, entry)
 
-    def _insert(self, node, word, index):
+    def _insert(self, node, word, index, entry):
         char = word[index]
         if not node:
             node = TSTNode(char)
         if char < node.char:
-            node.left = self._insert(node.left, word, index)
+            node.left = self._insert(node.left, word, index, entry)
         elif char > node.char:
-            node.right = self._insert(node.right, word, index)
+            node.right = self._insert(node.right, word, index, entry)
         else:
             if index + 1 < len(word):
-                node.eq = self._insert(node.eq, word, index + 1)
+                node.eq = self._insert(node.eq, word, index + 1, entry)
             else:
                 node.is_end = True
+                node.entries.append(entry)
         return node
 
+    def search(self, query):
+        node = self._traverse_to_node(self.root, query, 0)
+        results = []
+        if node:
+            self._collect_all(node, results)
+        return results
+
+    def _traverse_to_node(self, node, word, index):
+        if not node or index >= len(word):
+            return None
+        char = word[index]
+        if char < node.char:
+            return self._traverse_to_node(node.left, word, index)
+        elif char > node.char:
+            return self._traverse_to_node(node.right, word, index)
+        else:
+            if index + 1 == len(word):
+                return node.eq if node.eq else node
+            return self._traverse_to_node(node.eq, word, index + 1)
+
+    def _collect_all(self, node, results):
+        if node is None:
+            return
+        self._collect_all(node.left, results)
+        if node.is_end:
+            results.extend(node.entries)
+        self._collect_all(node.eq, results)
+        self._collect_all(node.right, results)
 # -------------------- LOAD ENTRIES --------------------
 
 def load_entries(path):
@@ -67,85 +115,22 @@ def load_entries(path):
                 continue
     return entries
 
-# -------------------- BENCHMARK --------------------
-
-def benchmark_search(query, dataset):
-    query = query.lower()
-
-    def match(entry):
-        return query in entry['title'].lower() or query in entry['author'].lower()
-
-    start_trie = time.perf_counter()
-    trie_results = [e for e in dataset if match(e)]
-    end_trie = time.perf_counter()
-
-    start_tst = time.perf_counter()
-    tst_results = [e for e in dataset if match(e)]
-    end_tst = time.perf_counter()
-
-    trie_time = (end_trie - start_trie) * 1000
-    tst_time = (end_tst - start_tst) * 1000
-
-    return {
-        "query": query,
-        "trie": {"matches": trie_results[:5], "time_ms": round(trie_time, 4)},
-        "tst": {"matches": tst_results[:5], "time_ms": round(tst_time, 4)},
-        "faster": "Trie" if trie_time < tst_time else "TST"
-    }
-
-# -------------------- TERMINAL APP --------------------
-
-def run_app(path):
-    print("\nLoading entries from:", path)
-    entries = load_entries(path)
-    print(f"Loaded {len(entries)} enriched entries\n")
-
-    print("Building data structures...")
-    trie = Trie()
-    tst = TernarySearchTree()
-    for entry in entries:
-        joined = f"title: {entry['title']} - author: {entry['author']}"
-        trie.insert(joined.lower())
-        tst.insert(joined.lower())
-    print("Trie and TST ready.\n")
-
-    print("Type any book title or author to search (or type 'exit' to quit):\n")
-    while True:
-        q = input("Search: ").strip()
-        if q.lower() == "exit":
-            print("Goodbye!")
-            break
-
-        result = benchmark_search(q, entries)
-
-        print(f"\nQuery: '{result['query']}' (searches title and author fields)")
-        print(f"\nTrie Matches ({result['trie']['time_ms']} ms):")
-        for match in result['trie']['matches']:
-            print(f" Title: {match['title']}\n Author: {match['author'] or 'Unknown'}\n")
-
-        print(f"\nTST Matches ({result['tst']['time_ms']} ms):")
-        for match in result['tst']['matches']:
-            print(f" Title: {match['title']}\n Author: {match['author'] or 'Unknown'}\n")
-
-        print(f"\nFaster: {result['faster']}\n")
-
-# Example usage:
-#run_app("enriched_editions.json.gz") # <--- Uncomment and adjust path when ready
-
 # ---------------------------------------- GUI FUNCTION ----------------------------------------
 
 
 def create_gui(path):
-
     entries = load_entries(path)
-
     trie = Trie()
     tst = TernarySearchTree()
-
     for entry in entries:
-        joined = f"title: {entry['title']} - author: {entry['author']}"
-        trie.insert(joined.lower())
-        tst.insert(joined.lower())
+        if entry.get("title"):
+            for word in entry["title"].lower().split():
+                trie.insert(word, entry)
+                tst.insert(word, entry)
+        if entry.get("author"):
+            for word in entry["author"].lower().split():
+                trie.insert(word, entry)
+                tst.insert(word, entry)
 
     root = tk.Tk()
     root.title("Project 3")
@@ -154,7 +139,7 @@ def create_gui(path):
 
 
 
-# -------------------------- Header --------------------------
+    # -------------------------- Header --------------------------
 
     header_frame = tk.Frame(root, bg="#84afbd")
     header_frame.pack(fill="x")
@@ -163,7 +148,7 @@ def create_gui(path):
 
 
 
-# -------------------------- Top Frame --------------------------
+    # -------------------------- Top Frame --------------------------
 
     top_frame = tk.Frame(root, bg="#ebf2f5")
     top_frame.pack(pady=15, padx=150, fill="x")
@@ -181,7 +166,7 @@ def create_gui(path):
 
 
 
-# -------------------------- Mid Frame with Canvas for Rounded Entry --------------------------
+    # -------------------------- Mid Frame with Canvas for Rounded Entry --------------------------
 
     mid_frame = tk.Frame(root, bg="#ebf2f5")
     mid_frame.pack(pady=10, padx=150, fill="x")
@@ -198,13 +183,13 @@ def create_gui(path):
     canvas_entry.pack(side="left", padx=(0, 10))
 
     canvas_entry.bind("<Configure>", lambda e: draw_rounded_entry(canvas_entry, e.width, 40))
-    
+
     search_entry = tk.Entry(entry_canvas_frame,width = 1100,textvariable=search_term, bd=0, font=("Segoe UI", 11), bg="white")
     search_entry.place(relx=0.02, rely=0.15, relwidth=0.96, height=25)
 
     button_frame = tk.Frame(search_container, bg="#ebf2f5")
     button_frame.pack(side="left")
-    
+
 
     placeholder_text = "Search"
 
@@ -234,7 +219,7 @@ def create_gui(path):
 
 
     def autofill_and_search(match):
-        search_term.set(match['title'])
+        search_term.set(match['title'].split()[0].lower())
         clear_suggestions()
         perform_search()
 
@@ -261,7 +246,7 @@ def create_gui(path):
         ][:3]
 
         suggestion_frame.pack(fill="x", pady=(10))
-        
+
         for match in matches[:3]:
             text = f"{match['title']} - {match['author'] or 'Unknown'}"
             btn = tk.Button(suggestion_frame, text=text, anchor="w", font=("Segoe UI", 9),bg="white", fg="#4d4d4d", bd=0, relief="solid",command=lambda m=match: autofill_and_search(m))
@@ -270,25 +255,31 @@ def create_gui(path):
             btn.pack(fill="x", padx=2, pady=0)
             suggestion_buttons.append(btn)
 
-            
+
 
 
     # ------------- UI Search Logic -----------------
 
     def perform_trie_search(query):
-        query = query.lower()
-
         results_box.delete(0, tk.END)
+        runs = 1000  #doing 1000 runs to actually get difference to show better
+        durations = []
+    
+        start = time.perf_counter_ns()
+        matches = trie.search(query)
+        end = time.perf_counter_ns()
+        base_duration = (end - start) / 1_000_000
 
-        start_trie = time.perf_counter()
-        matches = [
-        entry for entry in entries
-        if query in entry['title'].lower() or query in entry['author'].lower()
-        ]
-        end_trie = time.perf_counter()
-
-        time_taken = (end_trie - start_trie) * 1000
-        time_taken_var.set(f"Time Taken: {time_taken:.2f} ms")  
+        for _ in range(runs):
+            s = time.perf_counter_ns()
+            trie.search(query)
+            e = time.perf_counter_ns()
+            durations.append((e - s) / 1_000_000)
+        avg_time = sum(durations) / runs
+        time_taken_var.set(f"Time Taken: {avg_time:.4f} ms")
+        total_time = sum(durations)
+        avg_time = total_time / runs
+        time_taken_var.set(f"Total: {total_time:.2f} ms | Avg: {avg_time:.4f} ms")
 
         results_box.insert(tk.END, "-" * 40)
         if matches:
@@ -299,22 +290,28 @@ def create_gui(path):
         else:
             results_box.insert(tk.END, "No matches found.")
             results_box.insert(tk.END, "-" * 40)
-
 
     def perform_tst_search(query):
-        query = query.lower()
-
         results_box.delete(0, tk.END)
+        runs = 1000 #same reason as above
+        durations = []
 
-        start_tst = time.perf_counter()
-        matches = [
-        entry for entry in entries
-        if query in entry['title'].lower() or query in entry['author'].lower()
-        ]
-        end_tst = time.perf_counter()
+        start = time.perf_counter_ns()
+        matches = tst.search(query)
+        end = time.perf_counter_ns()
+        base_duration = (end - start) / 1_000_000
 
-        time_taken = (end_tst - start_tst) * 1000
-        time_taken_var.set(f"Time Taken: {time_taken:.2f} ms")
+        for _ in range(runs):
+            s = time.perf_counter_ns()
+            tst.search(query)
+            e = time.perf_counter_ns()
+            durations.append((e - s) / 1_000_000)
+
+        avg_time = sum(durations) / runs
+        time_taken_var.set(f"Time Taken: {avg_time:.4f} ms")
+        total_time = sum(durations)
+        avg_time = total_time / runs
+        time_taken_var.set(f"Total: {total_time:.2f} ms | Avg: {avg_time:.4f} ms")
 
         results_box.insert(tk.END, "-" * 40)
         if matches:
@@ -326,9 +323,8 @@ def create_gui(path):
             results_box.insert(tk.END, "No matches found.")
             results_box.insert(tk.END, "-" * 40)
 
-
     def perform_search(event=None):
-        query = search_term.get().strip()
+        query = search_term.get().strip().lower()
         clear_suggestions()
         if not query or query == placeholder_text:
             return
@@ -385,4 +381,4 @@ def create_gui(path):
     search_entry.bind("<KeyRelease>", on_key_release)
     root.mainloop()
 
-create_gui("enriched_editions.json.gz")
+create_gui("fulldata.json.gz") #change to your path
