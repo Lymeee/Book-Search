@@ -2,6 +2,7 @@ import gzip
 import json
 import time
 import sys
+import tracemalloc
 import tkinter as tk
 from tkinter import ttk
 sys.setrecursionlimit(10000)
@@ -262,24 +263,29 @@ def create_gui(path):
 
     def perform_trie_search(query):
         results_box.delete(0, tk.END)
-        runs = 1000  #doing 1000 runs to actually get difference to show better
+        runs = 1000 # 1000 runs for a better speed diff showing
         durations = []
-    
-        start = time.perf_counter_ns()
-        matches = trie.search(query)
-        end = time.perf_counter_ns()
-        base_duration = (end - start) / 1_000_000
 
+        tracemalloc.start()
+        total_memory = 0
         for _ in range(runs):
-            s = time.perf_counter_ns()
-            trie.search(query)
-            e = time.perf_counter_ns()
-            durations.append((e - s) / 1_000_000)
-        avg_time = sum(durations) / runs
-        time_taken_var.set(f"Time Taken: {avg_time:.4f} ms")
+            start = time.perf_counter_ns()
+            matches = trie.search(query)
+            end = time.perf_counter_ns()
+            durations.append((end - start) / 1_000_000)
+            _, peak = tracemalloc.get_traced_memory()
+            total_memory += peak
+
+        tracemalloc.stop()
+
         total_time = sum(durations)
         avg_time = total_time / runs
-        time_taken_var.set(f"Total: {total_time:.2f} ms | Avg: {avg_time:.4f} ms")
+        avg_memory = total_memory / runs
+
+        time_taken_var.set(
+            f"Time: {avg_time:.4f} ms avg, {total_time:.4f} ms total | "
+            f"Mem: {avg_memory/1024:.2f} KB avg, {total_memory/1024:.2f} KB total"
+        )
 
         results_box.insert(tk.END, "-" * 40)
         if matches:
@@ -293,25 +299,28 @@ def create_gui(path):
 
     def perform_tst_search(query):
         results_box.delete(0, tk.END)
-        runs = 1000 #same reason as above
+        runs = 1000 # same reason as above
         durations = []
 
-        start = time.perf_counter_ns()
-        matches = tst.search(query)
-        end = time.perf_counter_ns()
-        base_duration = (end - start) / 1_000_000
-
+        tracemalloc.start()
+        total_memory = 0
         for _ in range(runs):
-            s = time.perf_counter_ns()
-            tst.search(query)
-            e = time.perf_counter_ns()
-            durations.append((e - s) / 1_000_000)
+            start = time.perf_counter_ns()
+            matches = tst.search(query)
+            end = time.perf_counter_ns()
+            durations.append((end - start) / 1_000_000)
+            _, peak = tracemalloc.get_traced_memory()
+            total_memory += peak
+        tracemalloc.stop()
 
-        avg_time = sum(durations) / runs
-        time_taken_var.set(f"Time Taken: {avg_time:.4f} ms")
         total_time = sum(durations)
         avg_time = total_time / runs
-        time_taken_var.set(f"Total: {total_time:.2f} ms | Avg: {avg_time:.4f} ms")
+        avg_memory = total_memory / runs
+
+        time_taken_var.set(
+            f"Time: {avg_time:.4f} ms avg, {total_time:.4f} ms total | "
+            f"Mem: {avg_memory/1024:.2f} KB avg, {total_memory/1024:.2f} KB total"
+        )
 
         results_box.insert(tk.END, "-" * 40)
         if matches:
