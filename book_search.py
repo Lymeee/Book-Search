@@ -28,21 +28,26 @@ class Trie:
         cur.is_end = True
         cur.entries.append(entry)
 
-    def search(self, query):
+    def search(self, query, prefix_mode=False):
         node = self.root
         for ch in query:
             if ch not in node.children:
                 return []
             node = node.children[ch]
-        results = []
-        self._collect_all(node, results)
-        return results
+
+        if not prefix_mode and node.is_end:
+            return node.entries
+        else:
+            results = []
+            self._collect_all(node, results)
+            return results
 
     def _collect_all(self, node, results):
         if node.is_end:
             results.extend(node.entries)
         for child in node.children.values():
             self._collect_all(child, results)
+
 
 class TSTNode:
     def __init__(self, char):
@@ -74,12 +79,18 @@ class TernarySearchTree:
                 node.entries.append(entry)
         return node
 
-    def search(self, query):
+    def search(self, query, prefix_mode=False):
         node = self._traverse_to_node(self.root, query, 0)
+        if not node:
+            return []
+
+        if not prefix_mode:
+            return node.entries if node.is_end else []
+
         results = []
-        if node:
-            self._collect_all(node, results)
+        self._collect_all(node, results)
         return results
+
 
     def _traverse_to_node(self, node, word, index):
         if not node or index >= len(word):
@@ -91,7 +102,7 @@ class TernarySearchTree:
             return self._traverse_to_node(node.right, word, index)
         else:
             if index + 1 == len(word):
-                return node  
+                return node
             return self._traverse_to_node(node.eq, word, index + 1)
 
     def _collect_all(self, node, results):
@@ -117,12 +128,12 @@ def load_entries(path):
     return entries
 
 # ---------------------------------------- GUI FUNCTION ----------------------------------------
-
-
 def create_gui(path):
     entries = load_entries(path)
     trie = Trie()
     tst = TernarySearchTree()
+    print("Inserting data... please wait.")
+
     for entry in entries:
         if entry.get("title"):
             for word in entry["title"].lower().split():
@@ -132,6 +143,8 @@ def create_gui(path):
             for word in entry["author"].lower().split():
                 trie.insert(word, entry)
                 tst.insert(word, entry)
+
+    print("Data Loaded.")
 
     root = tk.Tk()
     root.title("Project 3")
@@ -254,6 +267,17 @@ def create_gui(path):
 
     # ------------- UI Search Logic -----------------
 
+    def measure_peak_memory(func):
+        tracemalloc.start()
+        snapshot_before = tracemalloc.take_snapshot()
+        result = func()
+        snapshot_after = tracemalloc.take_snapshot()
+        tracemalloc.stop()
+
+        stats = snapshot_after.compare_to(snapshot_before, 'lineno')
+        total_alloc = sum(stat.size_diff for stat in stats)
+        return result, max(0, total_alloc)
+
     def perform_search(event=None):
         query = search_term.get().strip().lower()
         clear_suggestions()
@@ -267,26 +291,39 @@ def create_gui(path):
         total_memory_tst = 0
 
         # TRIE
-        tracemalloc.start()
-        for _ in range(runs):
-            start = time.perf_counter_ns()
-            trie_matches = trie.search(query)
-            end = time.perf_counter_ns()
-            durations_trie.append((end - start) / 1_000_000)
-            _, peak = tracemalloc.get_traced_memory()
-            total_memory_trie += peak
-        tracemalloc.stop()
+        durations_trie = []
+        total_memory_trie = 0
+        trie_matches = []
 
-        # TST
-        tracemalloc.start()
         for _ in range(runs):
+            tracemalloc.start()
             start = time.perf_counter_ns()
-            tst_matches = tst.search(query)
+            results = trie.search(query, prefix_mode=False)
             end = time.perf_counter_ns()
+            current, peak = tracemalloc.get_traced_memory()
+            tracemalloc.stop()
+            durations_trie.append((end - start) / 1_000_000)
+            total_memory_trie += peak
+            trie_matches = results  # use last result for display
+
+
+        # TST 
+        durations_tst = []
+        total_memory_tst = 0
+        tst_matches = []
+
+        for _ in range(runs):
+            tracemalloc.start()
+            start = time.perf_counter_ns()
+            results = tst.search(query, prefix_mode=False)
+            end = time.perf_counter_ns()
+            current, peak = tracemalloc.get_traced_memory()
+            tracemalloc.stop()
             durations_tst.append((end - start) / 1_000_000)
-            _, peak = tracemalloc.get_traced_memory()
             total_memory_tst += peak
-        tracemalloc.stop()
+            tst_matches = results
+
+
 
         # Display
         trie_results_box.delete(0, tk.END)
